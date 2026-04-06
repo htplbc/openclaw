@@ -1,10 +1,11 @@
 #!/usr/bin/env -S node --import tsx
 
+import type { ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { collectProviderApiKeys } from "../src/agents/live-auth-keys.js";
 import { loadShellEnvFallback } from "../src/infra/shell-env.js";
 import { getProviderEnvVars } from "../src/secrets/provider-env-vars.js";
-import { spawnPnpmRunner } from "./pnpm-runner.mjs";
 
 export type MediaSuiteId = "image" | "music" | "video";
 
@@ -64,6 +65,22 @@ export type SuiteRunPlan = {
   suite: MediaSuiteConfig;
   providers: string[];
   skippedReason?: string;
+};
+
+type PnpmRunnerParams = {
+  pnpmArgs?: string[];
+  nodeArgs?: string[];
+  npmExecPath?: string;
+  nodeExecPath?: string;
+  platform?: NodeJS.Platform;
+  comSpec?: string;
+  stdio?: import("node:child_process").SpawnOptions["stdio"];
+  env?: NodeJS.ProcessEnv;
+};
+
+const require = createRequire(import.meta.url);
+const { spawnPnpmRunner } = require("./pnpm-runner.mjs") as {
+  spawnPnpmRunner: (params?: PnpmRunnerParams) => ChildProcess;
 };
 
 function parseCsv(raw: string | undefined): Set<string> | null {
@@ -286,7 +303,7 @@ async function runSuite(params: {
     `[live:media] run ${plan.suite.id}: ${plan.suite.testFile} providers=${plan.providers.join(",")}`,
   );
 
-  const child = spawnPnpmRunner({
+  const child: ChildProcess = spawnPnpmRunner({
     pnpmArgs: args,
     stdio: "inherit",
     env,
@@ -294,7 +311,7 @@ async function runSuite(params: {
 
   return await new Promise<number>((resolve, reject) => {
     child.on("error", reject);
-    child.on("exit", (code, signal) => {
+    child.on("exit", (code: number | null, signal: NodeJS.Signals | null) => {
       if (signal) {
         reject(new Error(`${plan.suite.id} exited via signal ${signal}`));
         return;
